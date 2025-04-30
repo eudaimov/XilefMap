@@ -1,0 +1,49 @@
+{
+  "name": "my-electron-app",
+  "version": "1.0.0",
+  "description": "Hello World!",
+  "main": "main.js",
+  "author": "Jane Doe",
+  "license": "MIT",
+  "dependencies": {
+    "leaflet": "^1.9.4",
+    "leaflet-gpx": "^2.2.0",
+    "pinia": "^3.0.2",
+    "vue": "^3.5.13",
+    "vue-router": "^4.5.1"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^5.2.3",
+    "cross-env": "^7.0.3",
+    "electron": "^35.2.1",
+    "eslint": "^8.57.1",
+    "semistandard": "^17.0.0",
+    "vite": "^6.3.3"
+  },
+  "scripts": {
+    "dev": "cross-env NODE_ENV=development vite",
+    "build": "vite build",
+    "serve": "vite preview",
+    "start": "cross-env NODE_ENV=development electron .",
+    "win": "npx electron-builder --win",
+    "linux": "npx electron-builder --linux"
+  },
+  "build": {
+    "appId": "com.miapp.electron",
+    "productName": "MiApp",
+    "directories": {
+      "output": "out"
+    },
+    "win": {
+      "target": "nsis",
+      "icon": "icono.ico"
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "icon": "icono.png"
+    }
+  }
+}
