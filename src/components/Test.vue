@@ -35,7 +35,7 @@
 import {onMounted} from "vue";
 import logoAplication from '@/assets/logoAplication.png';
 import BarRoute from "./BarRoute.vue";
-import {useMapStore} from "../store";
+import {useMapStore} from "@/store";
 
 const mapStore = useMapStore();
 onMounted(()=> {
@@ -50,12 +50,13 @@ onMounted(()=> {
       layers: 'mtn_rasterizado', // Nombre de la capa
       format: 'image/png',
       transparent: false,
-      attribution: '© Instituto Geográfico Nacional de España'
+      attribution: "<span class='enlace-externo' onclick='enlaceExterno(this)' data-enlace='https://www.ign.es'>© Instituto Geográfico Nacional de España</span>",
     },
     isWMS: true
   });
 
 });
+
 
 
 function changeMap(param) {
@@ -158,106 +159,3 @@ function changeMap(param) {
 
 
 </script>
-
-<style>
-*{
-  box-sizing: border-box;
-  margin:0;
-  padding: 0;
-}
-body {
-  margin: 0;
-  overflow: hidden;
-}
-
-.title-win {
-  width: 100%;
-  height: 3rem;
-  background-color: #2c3e50;
-  color: white;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 0 10px;
-  -webkit-app-region: drag; /* Permite arrastrar la ventana */
-}
-.title-win-text{
-  width: 100%;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  column-gap: 2rem;
-}
-.buttonMinimize{
-  -webkit-app-region: no-drag; /* Excluye los botones del área de arrastre */
-  min-width: 15px;
-  min-height: 15px;
-  background: #ffdd00;
-  border-radius: 50%;
-  border: none;
-  color: white;
-  cursor: pointer;
-  font-size: 4pt;
-}
-.buttonClose {
-  -webkit-app-region: no-drag; /* Excluye los botones del área de arrastre */
-  min-width: 15px;
-  min-height: 15px;
-  background: red;
-  border-radius: 50%;
-  border: none;
-  color: white;
-  cursor: pointer;
-  font-size: 4pt;
-}
-.buttonMaximize{
-  -webkit-app-region: no-drag; /* Excluye los botones del área de arrastre */
-  min-width: 15px;
-  min-height: 15px;
-  background: #73e408;
-  border-radius: 50%;
-  border: none;
-  color: white;
-  cursor: pointer;
-  font-size: 4pt;
-}
-.title-button{
-  display:flex;
-  gap:0.5rem;
-}
-.barMenu{
-  padding-inline: 1rem;
-  width: 100%;
-  height: 80px;
-  background-color: #474747;
-  color: #c1c1c1;
-  display: flex;
-  align-items: center;
-}
-.barMenu ol{
-  display: inline-flex;
-  column-gap: 0.5rem;
-  list-style: none;
-  align-items: center;
-}
-.areaAplication{
-  display: flex;
-  width: 100%;
-}
-#selectMap{
-  min-width: 170px;
-  width: 15%;
-  height: 100%;
-  padding: 1rem;
-}
-#selectMap ol{
-  list-style: none;
-  display: flex;
-  flex-direction: column;
-  row-gap: 1rem;
-}
-#map{
-  width: 85%;
-  height: 91vh;
-}
-</style>

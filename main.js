@@ -1,29 +1,31 @@
-const { app, BrowserWindow, Menu, ipcMain } = require('electron'); // Usa ipcMain en lugar de IpcMain
+const { app, BrowserWindow, Menu, ipcMain, shell } = require('electron'); // Usa ipcMain en lugar de IpcMain
 const path = require('path');
 
 let win;
 
-// Función para crear la ventana principal
+// FunciÃ³n para crear la ventana principal
 const createWindow = () => {
     win = new BrowserWindow({
         width: 1200,
         height: 800,
-        autoHideMenuBar: true, // Oculta el menú predeterminado
-        frame: false, // Oculta la barra de título
+        autoHideMenuBar: true, // Oculta el menÃº predeterminado
+        frame: false, // Oculta la barra de tÃ­tulo
         webPreferences: {
             preload: path.join(__dirname, 'preload.js'), // Usa el archivo preload
             nodeIntegration: false, // Se recomienda deshabilitar por seguridad
             contextIsolation: true, // Mejora la seguridad
         },
-        icon: path.join(__dirname, 'logoAplication.png'), // Icono de la aplicación
+        icon: path.join(__dirname, 'logoAplication.png'), // Icono de la aplicaciÃ³n
     });
 
-    // Carga la aplicación Vue desde el servidor de desarrollo de Vite
-    // o desde los archivos estáticos construidos
+    // Carga la aplicaciÃ³n Vue desde el servidor de desarrollo de Vite
+    // o desde los archivos estÃ¡ticos construidos
     if (process.env.NODE_ENV === 'development') {
         win.loadURL('http://localhost:5173'); // La URL del servidor de desarrollo de Vite
+        console.info("Entrando en desarrollo")
     } else {
-        win.loadFile(path.join(__dirname, '../dist/index.html')); // Carga el archivo index.html construido
+        win.loadFile(path.join(__dirname, 'dist', 'index.html')); // Carga el archivo index.html construido
+        console.info("Entrando en producciÃ³n")
     }
 };
 
@@ -35,10 +37,15 @@ ipcMain.on('minimize', () => {
 });
 ipcMain.on('maximize', () => {
     if (win) {
-        win.maximize(); // Método para maximizar la ventana
+        win.maximize(); // MÃ©todo para maximizar la ventana
     }
+});
+ipcMain.on('enlaceExterno', (event, url) => {
+    // Abre el enlace externo en el navegador predeterminado
+    console.info("Abriendo enlace externo: " + url);
+     shell.openExternal(url)
 });
 
 
-// Inicializa la aplicación cuando esté lista
+// Inicializa la aplicaciÃ³n cuando estÃ© lista
 app.whenReady().then(createWindow);

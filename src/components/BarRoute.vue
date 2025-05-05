@@ -19,27 +19,30 @@ const botonGuardar = ref(null)
 const botonEliminar = ref(null);
 const botonEliminarLast = ref(null);
 const botonUpload = ref(null);
+const distTotalSpan = ref(null);
 
 
 // Observa cambios en la propiedad "waypoints"
 watch(
     () => mapStore.waypoints, // Propiedad a observar
     (newWaypoints, oldWaypoints) => {
-      console.log('Waypoints actualizados:', newWaypoints);
       // Ejecuta la acción deseada
       if (newWaypoints.length > 0) {
         botonGuardar.value.classList.remove('desactivado');
         botonEliminar.value.classList.remove('desactivado');
         botonEliminarLast.value.classList.remove('desactivado');
+        distTotalSpan.value.innerHTML = mapStore.calcularDistanciaTotalRuta();
 
       }else{
         botonGuardar.value.classList.add('desactivado');
         botonEliminar.value.classList.add('desactivado');
         botonEliminarLast.value.classList.add('desactivado');
       }
+
     },
     { deep: true } // Observa cambios profundos en arrays u objetos
 );
+
 
 function crearRuta() {
   botonGrabar.value.classList.toggle('desactivado');
@@ -56,6 +59,7 @@ function detenerRuta() {
   mapStore.deactivateRegisterWayPoints();
 }
 function deleteRoute() {
+  distTotalSpan.value.innerHTML = "0.0 km"
   mapStore.clearWaypoints();
 }
 function deleteLast() {
@@ -170,6 +174,9 @@ function uploadRoute(event) {
       </li>
       <li ref="botonUpload" @click="uploadRoute()">
         <img :src="upload" class="icono" alt="upload" title="Cargar ruta sobre el mapa"></li>
+      <li>
+        T: <span ref="distTotalSpan">0,0 km</span>
+      </li>
     </ol>
   </nav>
 </template>

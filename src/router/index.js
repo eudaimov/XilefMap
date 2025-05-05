@@ -1,5 +1,5 @@
 // src/router/index.js
-import { createRouter, createWebHistory } from 'vue-router';
+import {createRouter, createWebHashHistory} from 'vue-router';
 import Test from '../components/Test.vue';
 
 const routes = [
@@ -10,8 +10,8 @@ const routes = [
   }
 ];
 
-const router = createRouter({
-  history: createWebHistory(),
+const router = createRouter()({
+  history: createWebHashHistory(),
   routes
 });
 

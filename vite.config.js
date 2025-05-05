@@ -10,6 +10,7 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src')
     },
   },
+  base:'./',
   build: {
     outDir: 'dist', // Asegúrate de que esto coincida con la ruta en main.js
   }

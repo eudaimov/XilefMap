@@ -1,14 +1,14 @@
 
 <template>
-  <router-view></router-view>
+  <Test></Test>
 </template>
 
 <script>
-import { RouterView } from 'vue-router';
+import './style/style.css';
+import {defineComponent} from "vue";
+import Test from "@/components/Test.vue";
 
-export default {
-  components: {
-    RouterView
-  }
-}
+export default defineComponent({
+  components: {Test}
+})
 </script>
