@@ -6,11 +6,16 @@ import pause from '@/assets/pause.svg';
 import deleteAll from '@/assets/delete.svg';
 import deleteLastWaypoint from '@/assets/deleteLastWaypoint.svg';
 import upload from '@/assets/upload.svg';
-import {useMapStore} from "../store";
+import grafica from '@/assets/grafica.svg';
+import graficaUpdate from '@/assets/graficaupdate.svg'
+import {useMapStore, useShowGraphic, useGraficChartStore} from "../store";
 import L from "leaflet";
-import {ref, watch} from "vue";
+import { ref, watch} from "vue";
 
 const mapStore = useMapStore();
+const graficStore = useGraficChartStore();
+const showGraphicStore = useShowGraphic();
+
 
 //Referencias
 const botonGrabar = ref(null);
@@ -19,7 +24,10 @@ const botonGuardar = ref(null)
 const botonEliminar = ref(null);
 const botonEliminarLast = ref(null);
 const botonUpload = ref(null);
+const botonGrafica = ref(null);
 const distTotalSpan = ref(null);
+
+
 
 
 // Observa cambios en la propiedad "waypoints"
@@ -61,6 +69,7 @@ function detenerRuta() {
 function deleteRoute() {
   distTotalSpan.value.innerHTML = "0.0 km"
   mapStore.clearWaypoints();
+  graficStore.eliminarChart()
 }
 function deleteLast() {
   mapStore.removeLastWaypoint();
@@ -77,10 +86,11 @@ function downloadGPX() {
 
   // Añadir waypoints
   mapStore.waypoints.forEach((latlng, index) => {
+    const elevation = mapStore.elevations[index];
     gpxData += `    <wpt lat="${latlng.lat}" lon="${latlng.lng}">\n`;
     gpxData += `        <name>${index + 1}</name>\n`;
-    if (latlng.elevation !== undefined && !isNaN(latlng.elevation)) {
-      gpxData += `        <ele>${parseFloat(latlng.elevation).toFixed(2)}</ele>\n`;
+    if (elevation !== undefined && !isNaN(elevation)) {
+      gpxData += `        <ele>${parseFloat(elevation).toFixed(2)}</ele>\n`;
     } else {
       gpxData += `        <ele>0.00</ele>\n`; // Valor por defecto si no hay elevación
     }
@@ -92,9 +102,10 @@ function downloadGPX() {
     gpxData += '    <trk>\n';
     gpxData += '        <name>Ruta ElixMap</name>\n';
     gpxData += '        <trkseg>\n';
-    mapStore.polyline.getLatLngs().forEach(latlng => {
+    mapStore.polyline.getLatLngs().forEach((latlng,index) => {
+      const elevation = mapStore.elevations[index];
       gpxData += `          <trkpt lat="${latlng.lat}" lon="${latlng.lng}">\n`;
-      gpxData += `            <ele>${latlng.elevation !== undefined && !isNaN(latlng.elevation) ? parseFloat(latlng.elevation).toFixed(2) : '0.00'}</ele>\n`;
+      gpxData += `            <ele>${elevation !== undefined && !isNaN(elevation) ? parseFloat(elevation).toFixed(2) : '0.00'}</ele>\n`;
       gpxData += `          </trkpt>\n`;
     });
     gpxData += '        </trkseg>\n';
@@ -151,6 +162,20 @@ function uploadRoute(event) {
 
   input.click(); // Simula el clic en el input
 }
+function mostrarOcultarGrafica() {
+  // Cambia la visibilidad de la gráfica;
+  // Si la gráfica está oculta, la muestra y viceversa
+  console.info("Esta oculto")
+  if(showGraphicStore.oculto){
+    mapStore.actualizarGrafica()
+  }
+  showGraphicStore.toggleMostrar();
+}
+function actualizarGrafica() {
+  if(!showGraphicStore.oculto){
+    mapStore.actualizarGrafica()
+  }
+}
 </script>
 
 <template>
@@ -174,6 +199,13 @@ function uploadRoute(event) {
       </li>
       <li ref="botonUpload" @click="uploadRoute()">
         <img :src="upload" class="icono" alt="upload" title="Cargar ruta sobre el mapa"></li>
+
+      <li ref="botonGrafica"  @click="mostrarOcultarGrafica()">
+        <img :src="grafica" alt="grafica" title="Mostrar Gráfica" class="icono">
+      </li>
+      <li ref="botonGraficaUpdate" @click="actualizarGrafica()">
+        <img :src="graficaUpdate" alt="graficaUpdate" title="Actualizar Gráfica" class="icono">
+      </li>
       <li>
         T: <span ref="distTotalSpan">0,0 km</span>
       </li>
@@ -190,8 +222,8 @@ function uploadRoute(event) {
   opacity: 100% !important;
 }
 .icono{
-  width: 50px;
-  height: 50px;
+  width: 6vh;
+  height: 6vh;
   background: #817e7e;
   border-radius: 0.3rem;
   cursor: pointer;

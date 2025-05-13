@@ -1,12 +1,13 @@
 {
     "name": "my-electron-app",
-    "version": "1.0.0",
+    "version": "1.1.0",
     "description": "Programa para la lectura y creación de archivos GPX",
     "main": "main.js",
     "author": "Félix García Sánchez",
     "license": "MIT",
     "dependencies": {
         "bluebird": "^3.7.2",
+        "chart.js": "^4.4.9",
         "leaflet": "^1.9.4",
         "leaflet-gpx": "^2.2.0",
         "pinia": "^3.0.2",

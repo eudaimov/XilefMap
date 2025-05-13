@@ -2,12 +2,13 @@ const { app, BrowserWindow, Menu, ipcMain, shell } = require('electron'); // Usa
 const path = require('path');
 
 let win;
+let isMaximizado = false;
 
 // Función para crear la ventana principal
 const createWindow = () => {
     win = new BrowserWindow({
-        width: 1200,
-        height: 800,
+        width: 1100,
+        height: 700,
         autoHideMenuBar: true, // Oculta el menú predeterminado
         frame: false, // Oculta la barra de título
         webPreferences: {
@@ -37,7 +38,13 @@ ipcMain.on('minimize', () => {
 });
 ipcMain.on('maximize', () => {
     if (win) {
-        win.maximize(); // Método para maximizar la ventana
+        if(isMaximizado){
+            win.restore();
+            isMaximizado = false;
+        }else{
+            win.maximize(); // Método para maximizar la ventana
+            isMaximizado = true;
+        }
     }
 });
 ipcMain.on('enlaceExterno', (event, url) => {

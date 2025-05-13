@@ -1,6 +1,6 @@
 // src/router/index.js
 import {createRouter, createWebHashHistory} from 'vue-router';
-import Test from '../components/Test.vue';
+import Test from '../components/MainTemplate.vue';
 
 const routes = [
   {
