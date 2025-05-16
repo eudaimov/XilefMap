@@ -1,11 +1,84 @@
-
 import {defineStore} from 'pinia';
 import L from 'leaflet';
 import {Chart, registerables} from "chart.js";
+import 'leaflet.offline';
+
 Chart.register(...registerables);
 
+// Añade estas constantes al inicio del archivo
+const MAX_CACHE_SIZE = 1024 * 1024 * 1024; // 1GB en bytes
+const CACHE_NAME = 'map-tiles-v1';
 
-  export const useMapStore = defineStore('map', {
+// Añade estas funciones auxiliares antes de la definición del store
+async function getCacheSize() {
+  try {
+    const cache = await caches.open(CACHE_NAME);
+    const keys = await cache.keys();
+    let size = 0;
+
+    for (const key of keys) {
+      const response = await cache.match(key);
+      const blob = await response.blob();
+      size += blob.size;
+    }
+    return size;
+  } catch (error) {
+    console.error('Error al calcular tamaño del caché:', error);
+    return 0;
+  }
+}
+
+async function cleanCacheIfNeeded(requiredSpace) {
+  try {
+    const cache = await caches.open(CACHE_NAME);
+    const currentSize = await getCacheSize();
+
+    if (currentSize + requiredSpace > MAX_CACHE_SIZE) {
+      const keys = await cache.keys();
+      const entries = await Promise.all(
+          keys.map(async (key) => {
+            const response = await cache.match(key);
+            const blob = await response.blob();
+            return {
+              key,
+              size: blob.size,
+              lastAccessed: response.headers.get('last-accessed') || 0
+            };
+          })
+      );
+
+      entries.sort((a, b) => a.lastAccessed - b.lastAccessed);
+
+      let freedSpace = 0;
+      for (const entry of entries) {
+        await cache.delete(entry.key);
+        freedSpace += entry.size;
+        if (currentSize - freedSpace + requiredSpace <= MAX_CACHE_SIZE) {
+          break;
+        }
+      }
+    }
+  } catch (error) {
+    console.error('Error al limpiar caché:', error);
+  }
+}
+
+
+// Función de debounce para optimizar las actualizaciones
+function debounce(func, wait) {
+  let timeout;
+  return function executedFunction(...args) {
+    const later = () => {
+      clearTimeout(timeout);
+      func(...args);
+    };
+    clearTimeout(timeout);
+    timeout = setTimeout(later, wait);
+  };
+}
+
+
+export const useMapStore = defineStore('map', {
     state: () => ({
       map: null,
       waypoints: [],
@@ -15,6 +88,7 @@ Chart.register(...registerables);
       layer: null,
       _onMapClick: null,
       distances: [],
+      isZooming: false,
     }),
     actions: {
       initializeMap(containerId, options) {
@@ -27,63 +101,182 @@ Chart.register(...registerables);
           this.map.setView([lat, lng], zoom);
         }
       },
-      addTileLayer({ url, options, isWMS }) {
+      async addTileLayer({ url, options, isWMS }) {
         if (this.layer) {
           this.map.removeLayer(this.layer);
         }
+
         if (this.map) {
           if (isWMS) {
-            this.layer = L.tileLayer.wms(url, options).addTo(this.map);
+            // Para capas WMS, usar caché personalizado
+            this.layer = L.tileLayer.wms(url, {
+              ...options,
+              createTile: async function(coords, done) {
+                const tile = document.createElement('img');
+                const tileUrl = this.getTileUrl(coords);
+
+                try {
+                  const cache = await caches.open(CACHE_NAME);
+                  let response = await cache.match(tileUrl);
+
+                  if (response) {
+                    // Usar tile cacheado
+                    const newHeaders = new Headers(response.headers);
+                    newHeaders.set('last-accessed', Date.now());
+                    response = new Response(response.body, { headers: newHeaders });
+                    cache.put(tileUrl, response.clone());
+
+                    const blob = await response.blob();
+                    tile.src = URL.createObjectURL(blob);
+                  } else {
+                    // Descargar nuevo tile
+                    response = await fetch(tileUrl);
+                    const blob = await response.blob();
+
+                    await cleanCacheIfNeeded(blob.size);
+
+                    const headers = new Headers();
+                    headers.set('last-accessed', Date.now());
+                    const cacheResponse = new Response(blob, { headers });
+                    await cache.put(tileUrl, cacheResponse);
+
+                    tile.src = URL.createObjectURL(blob);
+                  }
+                } catch (error) {
+                  console.error('Error cargando tile:', error);
+                  // Cargar tile sin caché si hay error
+                  tile.src = tileUrl;
+                }
+
+                done(null, tile);
+                return tile;
+              }
+            }).addTo(this.map);
           } else {
-            this.layer= L.tileLayer(url, options).addTo(this.map);
+            // Para tiles normales, usar leaflet.offline
+            this.layer = L.tileLayer.offline(url, {
+              ...options,
+              useCache: true,
+              crossOrigin: true,
+              maxZoom: 19,
+              storeName: CACHE_NAME, // Nombre del almacén IndexedDB
+              createTile: function(coords, done) {
+                const tile = L.TileLayer.prototype.createTile.call(this, coords, done);
+                tile.crossOrigin = 'anonymous';
+                return tile;
+              }
+            }).addTo(this.map);
+
+            // Eventos para monitorear el caché
+            this.layer.on('offline:below-min-zoom-error', () => {
+              console.log('Zoom demasiado alejado para cachear');
+            });
+
+            this.layer.on('offline:save-start', async (e) => {
+              console.log('Guardando tiles en caché...');
+              await cleanCacheIfNeeded(e.storageSize || 0);
+            });
+
+            this.layer.on('offline:save-end', async () => {
+              const size = await getCacheSize();
+              console.log(`Tiles guardados. Tamaño actual del caché: ${(size / 1024 / 1024).toFixed(2)} MB`);
+            });
           }
         }
       },
+
       // ¡Aquí está la clave! Informa a Leaflet del cambio de tamaño
       //map.invalidateSize()
       async activateRegisterWayPoints() {
+        // Crear el icono una sola vez fuera del manejador de eventos
+        const waypointIcon = L.icon({
+          iconUrl: './assets/location.svg',
+          shadowUrl: 'https://unpkg.com/leaflet@1.7.1/dist/images/marker-shadow.png',
+          iconSize: [25, 80],
+          iconAnchor: [12, 40],
+          popupAnchor: [1, -40],
+          shadowSize: [41, 41],
+        });
+
+        // Cache para almacenar elevaciones
+        const elevationCache = new Map();
+
+        // Función optimizada para obtener elevación con cache
+        const getCachedElevation = async (lat, lng) => {
+          const key = `${lat},${lng}`;
+          if (elevationCache.has(key)) {
+            return elevationCache.get(key);
+          }
+          const elevation = await getElevation(lat, lng);
+          elevationCache.set(key, elevation);
+          return elevation;
+        };
+
+        // Inicializar la polyline si no existe
+        if (!this.polyline) {
+          this.polyline = L.polyline([], {
+            color: 'red',
+            weight: 3
+          }).addTo(this.map);
+        }
+
         this._onMapClick = async (e) => {
-          // Obtener la elevación del punto clicado
-          this.waypoints.push(e.latlng);
-          this.elevations.push( await getElevation(e.latlng.lat, e.latlng.lng));
-          // Añadir un marcador en el waypoint
-          const marker = L.marker(e.latlng, {
-            icon: L.icon({
-              iconUrl:  './assets/location.svg',
-              shadowUrl: 'https://unpkg.com/leaflet@1.7.1/dist/images/marker-shadow.png',
-              iconSize: [25,80],
-              iconAnchor: [12, 40],
-              popupAnchor: [1, -40],
-              shadowSize: [41, 41],
-            }),
-          })
+          // Crear el marcador inmediatamente para feedback visual
+          const marker = L.marker(e.latlng, { icon: waypointIcon })
             .addTo(this.map)
-            .bindPopup('Waypoint #' + this.waypoints.length)
-            // .openPopup();
+            .bindPopup('Waypoint #' + (this.waypoints.length + 1));
+
+          // Actualizar arrays y dibujar polyline inmediatamente
+          this.waypoints.push(e.latlng);
           this.markers.push(marker);
-          // Introducir distancias parciales
-          const distanciaAcumulada = this.calcularDistanciaAcumulada();
-          this.distances.push(distanciaAcumulada);
 
-
-          // Dibujar la línea si hay al menos dos waypoints
+          // Actualizar la polyline inmediatamente si hay suficientes puntos
           if (this.waypoints.length >= 2) {
-            if (this.polyline) {
-              this.map.removeLayer(this.polyline); // Eliminar la línea anterior
-            }
-            this.polyline = L.polyline(this.waypoints, { color: 'red' }).addTo(this.map);
+            this.polyline.setLatLngs(this.waypoints);
           }
 
-
-        };
-        this.map.on('click', this._onMapClick);
-        // Escucha el evento de zoom y actualiza los marcadores
-        this.map.on('zoomend', () => {
-          this.markers.forEach(marker => {
-            // Asegúrate de que cada marcador esté correctamente posicionado
-            marker.setLatLng(marker.getLatLng());
+          // Obtener elevación y distancia en segundo plano
+          Promise.all([
+            getCachedElevation(e.latlng.lat, e.latlng.lng),
+            Promise.resolve(this.calcularDistanciaAcumulada())
+          ]).then(([elevation, distancia]) => {
+            this.elevations.push(elevation);
+            this.distances.push(distancia);
           });
+        };
+
+        // Usar un EventListener con opciones de rendimiento
+        this.map.on('click', this._onMapClick, {
+          passive: true // Mejora el rendimiento en navegadores modernos
         });
+
+        // Manejar el zoom con debounce
+        const handleZoomEnd = debounce(() => {
+          if (this.markers.length === 0) return;
+
+          if (this.isZooming) {
+            this.isZooming = false;
+            // Actualizar markers en lotes
+            requestAnimationFrame(() => {
+              this.markers.forEach(marker => {
+                const currentPos = marker.getLatLng();
+                if (currentPos) {
+                  marker.setLatLng(currentPos);
+                }
+              });
+              // Asegurar que la polyline se mantenga actualizada
+              if (this.waypoints.length >= 2) {
+                this.polyline.setLatLngs(this.waypoints);
+              }
+            });
+          }
+        }, 250);
+
+        this.map.on('zoomstart', () => {
+          this.isZooming = true;
+        });
+
+        this.map.on('zoomend', handleZoomEnd);
       },
       actualizarGrafica(){
         const storeGrafica = useGraficChartStore();
@@ -102,38 +295,30 @@ Chart.register(...registerables);
           this.map.off('click', this._onMapClick);
         }
       },
+      // Actualizar el método clearWaypoints
       clearWaypoints() {
         this.waypoints = [];
         if (this.polyline) {
-          this.map.removeLayer(this.polyline);
-          this.markers.forEach((marker) => {
-            this.map.removeLayer(marker); // Eliminar cada marcador
-          });
-          this.markers= [];
-          this.distances = [];
-          this.elevations = [];
-          this.polyline = null;
+          this.polyline.setLatLngs([]); // Limpiar los puntos de la polyline
         }
+        this.markers.forEach((marker) => {
+          this.map.removeLayer(marker);
+        });
+        this.markers = [];
+        this.distances = [];
+        this.elevations = [];
       },
+      // Optimizar el cálculo de distancia
       calcularDistanciaAcumulada() {
-        let distanciaTotal = 0;
+        if (this.markers.length < 2) return 0;
 
-        // Asegúrate de que haya al menos dos marcadores para calcular una distancia
-        if (this.markers.length < 1) {
-          return 0; // La distancia es 0 si hay menos de dos puntos
-        }
-
-        // Itera a través de los marcadores, calculando la distancia entre el actual y el siguiente
-        for (let i = 0; i < this.markers.length - 1; i++) {
-          const punto1 = this.markers[i].getLatLng();
-          const punto2 = this.markers[i + 1].getLatLng();
-
-          // Calcula la distancia entre los dos puntos
-          const distanciaSegmento = punto1.distanceTo(punto2);
-          distanciaTotal += distanciaSegmento;
-        }
-
-        return distanciaTotal;
+        // Usar reduce para mejor rendimiento
+        return this.markers.reduce((total, marker, index, array) => {
+          if (index === 0) return 0;
+          const punto1 = array[index - 1].getLatLng();
+          const punto2 = marker.getLatLng();
+          return total + punto1.distanceTo(punto2);
+        }, 0);
       },
       calcularDistanciaTotalRuta() {
         let distanciaTotal = this.calcularDistanciaAcumulada();
@@ -155,25 +340,23 @@ Chart.register(...registerables);
 
         return km +','+ metros+' km'; // Devuelve la distancia total en kilómetros y metros
       },
+      // Actualizar el método removeLastWaypoint
       removeLastWaypoint() {
         if (this.waypoints.length > 0) {
-          // Eliminar el último marcador del mapa
+          // Eliminar el último marcador
           const lastMarker = this.markers.pop();
           this.map.removeLayer(lastMarker);
 
-          // Eliminar el último waypoint
+          // Eliminar el último waypoint y datos relacionados
           this.waypoints.pop();
           this.distances.pop();
           this.elevations.pop();
 
-          // Actualizar la línea dibujada
-          if (this.polyline) {
-            this.map.removeLayer(this.polyline);
-            if (this.waypoints.length >= 2) {
-              this.polyline = L.polyline(this.waypoints, { color: 'red' }).addTo(this.map);
-            } else {
-              this.polyline = null;
-            }
+          // Actualizar la polyline
+          if (this.waypoints.length >= 2) {
+            this.polyline.setLatLngs(this.waypoints);
+          } else if (this.polyline) {
+            this.polyline.setLatLngs([]);
           }
         }
       }
